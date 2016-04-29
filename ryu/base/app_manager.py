@@ -42,7 +42,7 @@ from ryu.ofproto import ofproto_protocol
 from ryu.app.cluster import hazelcast_client
 import time
 
-
+CONF = cfg.CONF
 
 LOG = logging.getLogger('ryu.base.app_manager')
 
@@ -55,8 +55,9 @@ def init_hazelcast_manager():
     global hazelcastManager
     global test_str
     test_str = "I am so happy"
+    hazelcast_address = CONF.hazelcast_ip + ":" + str(CONF.hazelcast_port)
     hazelcastManager = hazelcast_client.HazelcastManager()
-    hazelcastManager.init_client()
+    hazelcastManager.init_client(hazelcast_address)
     print "++++++++++++++++++++++++++++++++++++++++++++++++++++++"
     print hazelcastManager
 def get_init_hazelcast_manager():

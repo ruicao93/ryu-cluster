@@ -9,6 +9,7 @@ from ryu.lib import hub
 import time
 import Queue
 import thread
+from ryu import cfg
 from distributed_topo_base import *
 from ryu.controller import handler
 LOG = logging.getLogger(__name__)

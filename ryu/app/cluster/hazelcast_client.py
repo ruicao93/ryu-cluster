@@ -2,7 +2,6 @@ import hazelcast, logging
 from hazelcast.proxy.base import Proxy, EntryEvent, EntryEventType
 from Queue import Queue
 import thread
-from threading import Condition
 import time
 import threading
 LOG = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ class HazelcastManager(object):
     def __init__(self):
         super(HazelcastManager, self).__init__()
         self.config = None
-        self.HazelCast_Address = "10.103.90.24:5701"
+        self.HazelCast_Address = "127.0.0.1:5701"
         self.hazelcast_client = None
         self.map_keys = [DSWITCH_MAP,DPORT_MAP,DLINK_MAP,DHOST_MAP]
         #distributed map reference to local hazelcast node
@@ -32,8 +31,9 @@ class HazelcastManager(object):
         self.dmap_update_thread = thread.start_new_thread(self._dmap_update_thread, ())
 
 
-    def init_client(self):
+    def init_client(self, HazelCast_Address):
         LOG.info("init hazelcast client...")
+        self.HazelCast_Address = HazelCast_Address
         self.config = hazelcast.ClientConfig()
         self.config.network_config.addresses.append(self.HazelCast_Address)
         self.hazelcast_client = hazelcast.HazelcastClient(self.config)

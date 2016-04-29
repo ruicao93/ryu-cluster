@@ -53,6 +53,10 @@ CONF.register_cli_opts([
     cfg.BoolOpt('enable-debugger', default=False,
                 help='don\'t overwrite Python standard threading library'
                 '(use only for debugging)'),
+    cfg.StrOpt('hazelcast-ip', default='127.0.0.1',
+               help='hazelcast-ip'),
+    cfg.IntOpt('hazelcast-port', default='5701',
+               help='hazelcast-port'),
 ])
 
 

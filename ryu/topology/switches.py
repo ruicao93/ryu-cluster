@@ -617,6 +617,13 @@ class Switches(app_manager.RyuApp):
 
         return True
 
+    def _is_domain_edge_port(self, port):
+        for link in self.inter_links:
+            if port == link.src:
+                return True
+        return False
+
+
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def state_change_handler(self, ev):
@@ -812,6 +819,7 @@ class Switches(app_manager.RyuApp):
         src = self._get_port(src_dpid, src_port_no)
         if not src or src.dpid == dst_dpid:
             return
+        
         try:
             self.ports.lldp_received(src)
         except KeyError:
@@ -896,6 +904,8 @@ class Switches(app_manager.RyuApp):
             return
         # ignore switch-to-switch port
         if not self._is_edge_port(port):
+            return
+        if self._is_domain_edge_port(port):
             return
 
         host_mac = eth.src

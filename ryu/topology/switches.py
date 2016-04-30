@@ -417,6 +417,11 @@ class LinkState(dict):
 
         return dst, rev_link_dst
 
+    def port_deleted_for_interlink(self, src):
+        dst = self.get_peer(src)
+
+        return dst, None
+
 
 class LLDPPacket(object):
     # make a LLDP packet for link discovery.
@@ -524,6 +529,7 @@ class Switches(app_manager.RyuApp):
         self.links = LinkState()      # Link class -> timestamp
         self.hosts = HostState()      # mac address -> Host class list
         self.is_active = True
+        self.inter_links = LinkState() # inter links: Link class -> timestamp
 
         self.link_discovery = self.CONF.observe_links
         if self.link_discovery:
@@ -590,6 +596,19 @@ class Switches(app_manager.RyuApp):
             rev_link = Link(dst, rev_link_dst)
             self.send_event_to_observers(event.EventLinkDelete(rev_link))
         self.ports.move_front(dst)
+
+    def _inter_link_down(self, port):
+        try:
+            #src_port = Port(port, None, None)
+            #src_port.port_no = port.port_no
+            dst, rev_link_dst = self.inter_links.port_deleted_for_interlink(port)
+        except KeyError:
+            # LOG.debug('key error. src=%s, dst=%s',
+            #           port, self.links.get_peer(port))
+            return
+
+        inter_link = Link(port, dst)
+        self.send_event_to_observers(event.EventLinkDelete(inter_link))
 
     def _is_edge_port(self, port):
         for link in self.links:
@@ -689,6 +708,7 @@ class Switches(app_manager.RyuApp):
                         if not port.is_reserved():
                             self.ports.del_port(port)
                             self._link_down(port)
+                            self._inter_link_down(port)
                     self.lldp_event.set()
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
@@ -729,6 +749,7 @@ class Switches(app_manager.RyuApp):
             if port and not port.is_reserved():
                 self.ports.del_port(port)
                 self._link_down(port)
+                self._inter_link_down(port)
                 self.lldp_event.set()
 
         else:
@@ -747,6 +768,7 @@ class Switches(app_manager.RyuApp):
             if port and not port.is_reserved():
                 if self.ports.set_down(port):
                     self._link_down(port)
+                    self._inter_link_down(port)
                 self.lldp_event.set()
 
     @staticmethod
@@ -800,10 +822,11 @@ class Switches(app_manager.RyuApp):
             pass
 
         dst = self._get_port(dst_dpid, dst_port_no)
-        if not dst:
-            return
+        #if not dst:
+        #    return
 
         old_peer = self.links.get_peer(src)
+
         # LOG.debug("Packet-In")
         # LOG.debug("  src=%s", src)
         # LOG.debug("  dst=%s", dst)
@@ -812,9 +835,16 @@ class Switches(app_manager.RyuApp):
             old_link = Link(src, old_peer)
             del self.links[old_link]
             self.send_event_to_observers(event.EventLinkDelete(old_link))
+        #hanlde port form other domain,define port_no = dpid:port_no
+        #TODO we assume that dpid is unique, if not we shuold extend LLDP to add with cid(controller id)
+        inter_link = None
+        if not dst:
+            dst_port = Port(dst_dpid,None,None)
+            dst_port.port_no = dst_port_no
+            inter_link = Link(src, dst_port)
 
         link = Link(src, dst)
-        if link not in self.links:
+        if (link) and (link not in self.links):
             self.send_event_to_observers(event.EventLinkAdd(link))
 
             # remove hosts from edge port
@@ -822,7 +852,17 @@ class Switches(app_manager.RyuApp):
                 if not self._is_edge_port(host.port):
                     del self.hosts[host.mac]
 
-        if not self.links.update_link(src, dst):
+        if (inter_link) and (inter_link not in self.inter_links):
+            LOG.info("discover inter_link:-----------------" + inter_link)
+            LOG.info(inter_link)
+            self.send_event_to_observers(event.EventLinkAdd(inter_link))
+
+            # remove hosts from edge port
+            for host in self.hosts.values():
+                if not self._is_edge_port(host.port):
+                    del self.hosts[host.mac]
+
+        if (link) and (not self.links.update_link(src, dst)):
             # reverse link is not detected yet.
             # So schedule the check early because it's very likely it's up
             self.ports.move_front(dst)
@@ -870,17 +910,26 @@ class Switches(app_manager.RyuApp):
         if eth.ethertype == ether_types.ETH_TYPE_ARP:
             arp_pkt = pkt.get_protocols(arp.arp)[0]
             self.hosts.update_ip(host, ip_v4=arp_pkt.src_ip)
+            update_host = self.hosts[host.mac]
+            uev = event.EventHostAdd(update_host)
+            self.send_event_to_observers(uev)
 
         # ipv4 packet, update ipv4 address
         elif eth.ethertype == ether_types.ETH_TYPE_IP:
             ipv4_pkt = pkt.get_protocols(ipv4.ipv4)[0]
             self.hosts.update_ip(host, ip_v4=ipv4_pkt.src)
+            update_host = self.hosts[host.mac]
+            uev = event.EventHostAdd(update_host)
+            self.send_event_to_observers(uev)
 
-        # ipv6 packet, update ipv6 address
+        # ipv6 packet, update ipv6 addressE
         elif eth.ethertype == ether_types.ETH_TYPE_IPV6:
             # TODO: need to handle NDP
             ipv6_pkt = pkt.get_protocols(ipv6.ipv6)[0]
             self.hosts.update_ip(host, ip_v6=ipv6_pkt.src)
+            update_host = self.hosts[host.mac]
+            uev = event.EventHostAdd(update_host)
+            self.send_event_to_observers(uev)
 
     def send_lldp_packet(self, port):
         try:
@@ -951,6 +1000,7 @@ class Switches(app_manager.RyuApp):
 
             now = time.time()
             deleted = []
+            inter_deleted = []
             for (link, timestamp) in self.links.items():
                 # LOG.debug('%s timestamp %d (now %d)', link, timestamp, now)
                 if timestamp + self.LINK_TIMEOUT < now:
@@ -960,6 +1010,21 @@ class Switches(app_manager.RyuApp):
                         # LOG.debug('port_data %s', port_data)
                         if port_data.lldp_dropped() > self.LINK_LLDP_DROP:
                             deleted.append(link)
+
+            for (link, timestamp) in self.inter_links.items():
+                # LOG.debug('%s timestamp %d (now %d)', link, timestamp, now)
+                if timestamp + self.LINK_TIMEOUT < now:
+                    src = link.src
+                    if src in self.ports:
+                        port_data = self.ports.get_port(src)
+                        # LOG.debug('port_data %s', port_data)
+                        if port_data.lldp_dropped() > self.LINK_LLDP_DROP:
+                            inter_deleted.append(link)
+
+            for link in inter_deleted:
+                self.inter_links.link_down(link)
+                # LOG.debug('delete %s', link)
+                self.send_event_to_observers(event.EventLinkDelete(link))
 
             for link in deleted:
                 self.links.link_down(link)

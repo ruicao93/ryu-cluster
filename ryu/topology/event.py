@@ -170,4 +170,8 @@ class EventHostAdd(EventHostBase):
     def __init__(self, host):
         super(EventHostAdd, self).__init__(host)
 
+class EventHostDelete(EventHostBase):
+    def __init__(self, host):
+        super(EventHostDelete, self).__init__(host)
+
 handler.register_service('ryu.topology.switches')

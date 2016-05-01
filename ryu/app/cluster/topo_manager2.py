@@ -99,7 +99,7 @@ class TopoManager2(app_manager.RyuApp):
                event.EventPortAdd, event.EventPortDelete,
                event.EventPortModify,
                event.EventLinkAdd, event.EventLinkDelete,
-               event.EventHostAdd]
+               event.EventHostAdd,event.EventHostDelete]
 
     @set_ev_cls(event.EventPortAdd)
     def port_add_handler(self, ev):
@@ -149,6 +149,14 @@ class TopoManager2(app_manager.RyuApp):
         data = dtopobase2dict(dhost)
         print "host-add:+++++++++++++++++++++++++++++++++++++++++++++++++++++data:"
         self.hazelcast_manager.update_map_value(DHOST_MAP, port_id, data)
+        pass
+
+    @set_ev_cls(event.EventHostDelete)
+    def host_delete_handler(self, ev):
+        host = ev.host
+        port_id = str(host.port.dpid) + ":" + str(host.port.port_no)
+        print "host-delete:+++++++++++++++++++++++++++++++++++++++++++++++++++++data:"
+        self.hazelcast_manager.remove_map_value(DHOST_MAP, port_id)
         pass
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)

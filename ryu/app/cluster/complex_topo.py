@@ -46,21 +46,26 @@ def multiControllerNet():
 
     logger.debug("*** Creating switches")
 
-    switch_list = [net.addSwitch('s%d' % n) for n in xrange(1, 5)]
+    switch_list = [net.addSwitch('s%d' % n) for n in xrange(1, 7)]
 
     logger.debug("*** Creating hosts")
-    host_list = [net.addHost('h%d' % n) for n in xrange(1,5)]
+    host_list = [net.addHost('h%d' % n) for n in xrange(1,7)]
 
     logger.debug("*** Creating links of host2switch.")
     net.addLink(switch_list[0], host_list[0])
     net.addLink(switch_list[1], host_list[1])
     net.addLink(switch_list[2], host_list[2])
     net.addLink(switch_list[3], host_list[3])
+    net.addLink(switch_list[4], host_list[4])
+    net.addLink(switch_list[5], host_list[5])
 
     logger.debug("*** Creating intra links of switch2switch.")
     net.addLink(switch_list[0], switch_list[1])
-    net.addLink(switch_list[1], switch_list[2])
-    net.addLink(switch_list[2], switch_list[3])
+    net.addLink(switch_list[0], switch_list[2])
+    net.addLink(switch_list[3], switch_list[4])
+    net.addLink(switch_list[3], switch_list[5])
+    net.addLink(switch_list[0], switch_list[3])
+    net.addLink(switch_list[2], switch_list[5])
 
     net.build()
     for c in controller_list:
@@ -69,8 +74,10 @@ def multiControllerNet():
     _No = 0
     switch_list[0].start([controller_list[0]])
     switch_list[1].start([controller_list[0]])
-    switch_list[2].start([controller_list[1]])
+    switch_list[2].start([controller_list[0]])
     switch_list[3].start([controller_list[1]])
+    switch_list[4].start([controller_list[1]])
+    switch_list[5].start([controller_list[1]])
     logger.info("*** Setting OpenFlow version")
 
     logger.info("*** Running CLI")

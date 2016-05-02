@@ -41,7 +41,7 @@ from ryu.lib import hub
 from ryu.ofproto import ofproto_protocol
 from ryu.app.cluster import hazelcast_client
 import time
-
+from ryu.app.cluster.distributed_topo_base import *
 CONF = cfg.CONF
 
 LOG = logging.getLogger('ryu.base.app_manager')

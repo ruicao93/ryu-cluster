@@ -18,7 +18,7 @@ from ryu.controller.handler import CONFIG_DISPATCHER
 
 
 LOG = logging.getLogger(__name__)
-MAX_CID = 0xffffffff
+MAX_CID = 2048
 #import hazelcast_client
 
 
@@ -26,7 +26,7 @@ DSWITCH_MAP = "distibuted-dswitch-map"
 DPORT_MAP = "distributed-dport-map"
 DLINK_MAP = "distributed-dlink-map"
 DHOST_MAP = "distributed-dhost-map"
-
+DFLOW_MAP = "distributed-dflow-map"
 
 class TopoManager2(app_manager.RyuApp):
 
@@ -40,6 +40,7 @@ class TopoManager2(app_manager.RyuApp):
         self.cid = random.randint(0, MAX_CID)
         self.hazelcast_manager = ryu.base.app_manager.hazelcastManager
         self.queue = Queue.Queue()
+        self.hazelcast_manager.cid = self.cid
         print "------------------------------------------------------------------"
         print self.hazelcast_manager
 
@@ -47,9 +48,9 @@ class TopoManager2(app_manager.RyuApp):
     def start(self):
         super(TopoManager2, self).start()
         #self.show_topo_thread = hub.spawn(self._show_topo)
-        thread.start_new_thread(self._show_topo, ())
+        thread.start_new_thread(self._receive_flow, ())
 
-    def _show_topo(self):
+    def _receive_flow(self):
         dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
         dport_map = self.hazelcast_manager.get_map(DPORT_MAP)
         dhost_map = self.hazelcast_manager.get_map(DHOST_MAP)
@@ -184,6 +185,57 @@ class TopoManager2(app_manager.RyuApp):
 
     def remove_map_value(self, map_name, key):
         self.hazelcast_manager.remove_map_value(map_name, key)
+
+    def add_flowinfo(self,dflow):
+        data = dtopobase2dict(dflow)
+        self.hazelcast_manager.update_map_value(DFLOW_MAP, random.randint(0, MAX_CID), data)
+
+    def get_host_location(self, host_ip):
+        dhost_map = self.hazelcast_manager.get_map(DHOST_MAP)
+        dport_id = None
+        for dhost_json in dhost_map.values():
+            dhost = dict2dhost(dhost_json)
+            if dhost.ipv4 == host_ip:
+                dport_id = dhost.port_id
+        if dport_id:
+            dport_map = self.hazelcast_manager.get_map(DPORT_MAP)
+            dport = dport_map.get(dport_id)
+            return dict2dport(dport)
+        return None
+
+    def get_all_host(self):
+        dhost_map = self.hazelcast_manager.get_map(DHOST_MAP)
+        dhost_list = []
+        for dhost in dhost_map.values():
+            dhost_list.append(dict2dhost(dhost))
+        return dhost_list
+
+    def get_all_switch(self):
+        dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
+        dswitch_list = []
+        for dswitch in dswitch_map.values():
+            dswitch_list.append(dict2dswitch(dswitch))
+        return  dswitch_list
+
+    def get_all_switch_map(self):
+        dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
+        dswitch_map = {}
+        for key in dswitch_map:
+            dswitch_map[key] = dict2dswitch(dswitch_map.get(key))
+        return dswitch_map
+
+    def get_all_link(self):
+        d_map = self.hazelcast_manager.get_map(DLINK_MAP)
+        d_list = []
+        for key in d_map.values():
+            d_list.append(dict2dlink(key))
+        return d_list
+
+    def get_cid(self):
+        return self.cid
+
+    def get_flow_queue(self):
+        return self.hazelcast_manager.flow_queue
 
     def add_flow(self, dp, p, match, actions, idle_timeout=0, hard_timeout=0):
         ofproto = dp.ofproto

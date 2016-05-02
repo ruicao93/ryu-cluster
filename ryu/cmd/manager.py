@@ -42,7 +42,7 @@ from ryu.base.app_manager import AppManager
 from ryu.controller import controller
 from ryu.topology import switches
 import ryu.base.app_manager
-
+from ryu.app.cluster.distributed_topo_base import *
 CONF = cfg.CONF
 CONF.register_cli_opts([
     cfg.ListOpt('app-lists', default=[],

@@ -39,7 +39,6 @@ from ryu.ofproto import ofproto_v1_0
 from ryu.ofproto import ofproto_v1_2
 from ryu.ofproto import ofproto_v1_3
 from ryu.ofproto import ofproto_v1_4
-import json
 
 LOG = logging.getLogger(__name__)
 

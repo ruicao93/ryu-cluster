@@ -3,9 +3,21 @@ import logging
 import time
 import thread
 import random
-
+from distributed_topo_base import *
 
 def main():
+    # basic logging setup to see client logs
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.INFO)
+    hazelcastManager = hazelcast_client.HazelcastManager()
+    hazelcastManager.init_client("127.0.0.1:5701")
+    map = hazelcastManager.get_distributed_map("test-map")
+    dflow = DFlow(1,1,1,1,1,"123",None,"flow-mod",None)
+    #map.put(1,dflow)
+    df = map.get(1)
+    print df.data
+
+def main2():
     # basic logging setup to see client logs
     logging.basicConfig()
     logging.getLogger().setLevel(logging.INFO)

@@ -33,7 +33,7 @@ class Shortest_Forwarding(app_manager.RyuApp):
         ip_pkt = pkt.get_protocol(ipv4.ipv4)
         src_ip = None
         dst_ip = None
-
+        eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
         if len(pkt.get_protocols(ethernet.ethernet)):
             eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
         if isinstance(arp_pkt, arp.arp):
@@ -57,6 +57,12 @@ class Shortest_Forwarding(app_manager.RyuApp):
         print type(action)
         print in_port
         print type(in_port)
+        print eth_type
+        print type(eth_type)
+        print src_ip
+        print type(src_ip)
+        print dst_ip
+        print type(dst_ip)
         pass
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)

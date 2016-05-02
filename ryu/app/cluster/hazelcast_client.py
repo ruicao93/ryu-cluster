@@ -11,9 +11,10 @@ DSWITCH_MAP = "distibuted-dswitch-map"
 DPORT_MAP = "distributed-dport-map"
 DLINK_MAP = "distributed-dlink-map"
 DHOST_MAP = "distributed-dhost-map"
+DFLOW_MAP = "distributed-dflow-map"
 
 UPDATE = "update"
-REMOVE = "REMOVE"
+REMOVE = "remove"
 
 class HazelcastManager(object):
     def __init__(self):
@@ -27,7 +28,9 @@ class HazelcastManager(object):
         #local map cache
         self.local_maps = {}
         self.queue = Queue()
+        self.flow_queue = Queue()
         #self.condition = Condition()
+        self.cid = None
         self.dmap_update_thread = thread.start_new_thread(self._dmap_update_thread, ())
 
 
@@ -50,6 +53,8 @@ class HazelcastManager(object):
                                                 updated=self._dlink_map_changed, removed=self._dlink_map_changed)
         self.d_maps[DHOST_MAP].add_entry_listener(include_value=True, added=self._dhost_map_changed,
                                                 updated=self._dhost_map_changed, removed=self._dhost_map_changed)
+        self.d_maps[DFLOW_MAP].add_entry_listener(include_value=True, added=self._dflow_map_changed,
+                                                updated=self._dflow_map_changed, removed=self._dhost_map_changed)
 
     def _init_map(self, map_name):
         d_map = self.hazelcast_client.get_map(map_name).blocking()
@@ -104,6 +109,21 @@ class HazelcastManager(object):
         elif event.event_type == EntryEventType.updated:
             self.update_local_map_value(DHOST_MAP, event.key, event.value)
 
+    def _dflow_map_changed(self, event):
+        if event.event_type == EntryEventType.added:
+            #self.update_local_map_value(DHOST_MAP, event.key, event.value)
+            dflow = event.value
+            if dflow ==self.cid:
+                self.flow_queue.put(dflow)
+            pass
+        elif event.event_type == EntryEventType.removed:
+
+            pass
+            #self.remove_local_map_value(DHOST_MAP, event.key)
+        elif event.event_type == EntryEventType.updated:
+            pass
+            #self.update_local_map_value(DHOST_MAP, event.key, event.value)
+
     #update map value
     def update_map_value(self, map_name, key, value):
         LOG.info("update data to local...")
@@ -120,6 +140,8 @@ class HazelcastManager(object):
         data = ConsumerData(map_name, key, 0, REMOVE)
         self.queue.put(data)
 
+
+
     #thread to synchronize local map update data to hazelcast
     def _dmap_update_thread(self):
         LOG.info("_dmap_update_thread start...............................................")
@@ -134,7 +156,7 @@ class HazelcastManager(object):
 
 
 class ConsumerData(object):
-    def __init__(self, map_name, key, value,type):
+    def __init__(self, map_name, key, value,type=UPDATE):
         self.map_name = map_name
         self.key = key
         self.value = value

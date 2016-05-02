@@ -26,7 +26,7 @@ DSWITCH_MAP = "distibuted-dswitch-map"
 DPORT_MAP = "distributed-dport-map"
 DLINK_MAP = "distributed-dlink-map"
 DHOST_MAP = "distributed-dhost-map"
-
+DFLOW_MAP = "distributed-dflow-map"
 
 class TopoManager2(app_manager.RyuApp):
 
@@ -40,6 +40,7 @@ class TopoManager2(app_manager.RyuApp):
         self.cid = random.randint(0, MAX_CID)
         self.hazelcast_manager = ryu.base.app_manager.hazelcastManager
         self.queue = Queue.Queue()
+        self.hazelcast_manager.cid = self.cid
         print "------------------------------------------------------------------"
         print self.hazelcast_manager
 
@@ -48,6 +49,7 @@ class TopoManager2(app_manager.RyuApp):
         super(TopoManager2, self).start()
         #self.show_topo_thread = hub.spawn(self._show_topo)
         thread.start_new_thread(self._show_topo, ())
+        thread.start_new_thread(self._receive_flow, ())
 
     def _show_topo(self):
         dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
@@ -185,15 +187,52 @@ class TopoManager2(app_manager.RyuApp):
     def remove_map_value(self, map_name, key):
         self.hazelcast_manager.remove_map_value(map_name, key)
 
-    def add_flow(self, dp, p, match, actions, idle_timeout=0, hard_timeout=0):
-        ofproto = dp.ofproto
-        parser = dp.ofproto_parser
+    def add_flowinfo(self,dflow):
+        data = dtopobase2dict(dflow)
+        self.hazelcast_manager.update_map_value(DFLOW_MAP, random.randint(0, MAX_CID), data)
 
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
-                                             actions)]
+    def get_host_location(self, host_ip):
+        dhost_map = self.hazelcast_manager.get_map(DHOST_MAP)
+        dport_id = None
+        for dhost in dhost_map.values():
+            if dhost.ipv4 == host_ip:
+                dport_id = dhost.port_id
+        if dport_id:
+            dport_map = self.hazelcast_manager.get_map(DPORT_MAP)
+            dport = dport_map.get(dport_id)
+            return dport
+        return None
 
-        mod = parser.OFPFlowMod(datapath=dp, priority=p,
-                                idle_timeout=idle_timeout,
-                                hard_timeout=hard_timeout,
-                                match=match, instructions=inst)
-        dp.send_msg(mod)
+    def get_all_host(self):
+        dhost_map = self.hazelcast_manager.get_map(DHOST_MAP)
+        dhost_list = []
+        for dhost in dhost_map.values():
+            dhost_list.append(dhost)
+        return dhost_list
+
+    def get_all_switch(self):
+        dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
+        dswitch_list = []
+        for dswitch in dswitch_map.values():
+            dswitch_list.append(dswitch)
+        return  dswitch_list
+
+    def get_all_switch_map(self):
+        dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
+        dswitch_map = {}
+        for key in dswitch_map:
+            dswitch_map[key] = dswitch_map.get(key)
+        return dswitch_map
+
+    def get_all_link(self):
+        d_map = self.hazelcast_manager.get_map(DLINK_MAP)
+        d_list = []
+        for key in d_map.values():
+            d_list.append(key)
+        return d_list
+
+    def get_cid(self):
+        return self.cid
+
+    def get_flow_queue(self):
+        return self.hazelcast_manager.flow_queue

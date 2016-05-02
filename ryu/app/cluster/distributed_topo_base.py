@@ -7,7 +7,9 @@ import json
 
 LOG = logging.getLogger(__name__)
 
-
+FLOW_MOD = "flow-mod"
+PACKET_OUT = "packet-out"
+FLOOD = "flood"
 class DPort(object):
     def __init__(self, dpid, port_no,id = None):
         super(DPort, self).__init__()
@@ -43,6 +45,26 @@ class DLink(object):
         self.src_port_id = src_port_id
         self.dst_port_id = dst_port_id
 
+class DFlow(object):
+    def __init__(self,cid, dpid, eth_type,src_port_no,dst_port_no,src_ipv4, dst_ipv4,operation_type=FLOW_MOD,data=None):
+        super(DFlow, self).__init__()
+        self.cid = cid
+        self.dpid = dpid
+        self.eth_type = eth_type
+        self.src_port_no = src_port_no
+        self.dst_port_no = dst_port_no
+        self.src_ipv4 = src_ipv4
+        self.dst_ipv4 = dst_ipv4
+        self.operation_type = operation_type
+        self.data = data
+
+    def is_flow_mod(self):
+        return self.operation_type == FLOW_MOD
+
+    def is_packet_out(self):
+        return self.operation_type == PACKET_OUT
+    def is_flood(self):
+        return self.operation_type == FLOOD
 
 
 def dict2dswitch(d):
@@ -56,6 +78,9 @@ def dict2dhost(d):
 
 def dict2dlink(d):
     return DLink(d['src_port_id'], d['dst_port_id'])
+
+def dict2dflow(d):
+    return DLink(d['cid'], d['dpid'], d['eth_type'], d['src_port_no'], d['dst_port_no'], d['src_ipv4'], d['dst_ipv4'], d['operation_type'],d['data'])
 
 def dswitch2dict(dswitch):
     return json.dumps(dswitch, default=lambda obj: obj.__dict__)

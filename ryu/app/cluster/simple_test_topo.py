@@ -57,6 +57,7 @@ def multiControllerNet():
 
     logger.debug("*** Creating intra links of switch2switch.")
     net.addLink(switch_list[0], switch_list[1])
+    net.addLink(switch_list[1], switch_list[0])
 
     net.build()
     for c in controller_list:

@@ -78,6 +78,7 @@ class DFlow(object):
 class DPort(object):
     def __init__(self, dpid, port_no,id = None):
         super(DPort, self).__init__()
+        self.id = None
         if not id:
             self.id = id
         else:
@@ -115,11 +116,11 @@ class DLink(object):
 
 def dict2dswitch(str):
     d = json.loads(str)
-    return DSwitch(d['dpid'], d['dpid'], d['id'])
+    return DSwitch(d['dpid'], d['cid'])
 
-def dict2dport(d):
+def dict2dport(str):
     d = json.loads(str)
-    return DPort(d['dpid'], d['port_no'])
+    return DPort(d['dpid'], d['port_no'],d['id'])
 
 def dict2dhost(str):
     d = json.loads(str)
@@ -144,4 +145,16 @@ dflow = DFlow(1,1,1,1,1,"123",None,"flow-mod",None)
 dflow_json =  json.dumps(dflow, default=lambda obj: obj.__dict__)
 print dflow_json
 df = dict2dflow(dflow_json)
-print df.cid'''
+print df.cid
+dhost = DHost("1:2","1111","12","12")
+dhost_json = dtopobase2dict(dhost)
+print dhost_json
+dn = dict2dhost(dhost_json)
+print dn.port_id
+print dn.port_id.split(":")[0]
+
+dport = DPort(1,'1:2',"1:2:2")
+d_json = dtopobase2dict(dport)
+print d_json
+dn = dict2dport(d_json)
+print dn.port_no'''

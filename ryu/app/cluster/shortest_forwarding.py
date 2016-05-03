@@ -17,6 +17,7 @@ import thread
 import networkx as nx
 
 LOG = logging.getLogger(__name__)
+NO_BUFFER = 0xffffffff
 
 class Shortest_Forwarding(app_manager.RyuApp):
 
@@ -43,6 +44,7 @@ class Shortest_Forwarding(app_manager.RyuApp):
             if dflow.operation_type == FLOOD:
                 if dflow.cid != self.cid:
                     self.flood_local(dflow.data)
+                    LOG.debug("flood packet according dflow from peer")
                 continue
             # packet out
             if dflow.operation_type == PACKET_OUT:
@@ -51,11 +53,13 @@ class Shortest_Forwarding(app_manager.RyuApp):
                 src_port = None
                 dst_port = dflow.dst_port_no
                 data = dflow.data
-                self.send_packet_out_local(datapath, buffer_id, src_port, dst_port, data)
+                self.send_packet_out_local(datapath, datapath.ofproto.OFP_NO_BUFFER, src_port, dst_port, data)
+                LOG.debug("packet-out according dflow from peer")
                 continue
             # install flow
             if dflow.operation_type == FLOW_MOD:
                 self.send_flow_mod_local(self, datapath, dflow)
+                LOG.debug("flow mod according dflow from peer")
                 continue
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -112,11 +116,11 @@ class Shortest_Forwarding(app_manager.RyuApp):
     #send flow to local switch
     def send_flow_mod_local(self, datapath, flow_info):
         parser = datapath.ofproto_parser
-        eth_type = flow_info.get("eth_type")
-        src_port = flow_info.get("src_port_no")
-        dst_port = flow_info.get("dst_port_no")
-        src_ipv4 = flow_info.get("src_ipv4")
-        dst_ipv4 = flow_info.get("dst_ipv4")
+        eth_type = flow_info.eth_type
+        src_port = flow_info.src_port_no
+        dst_port = flow_info.dst_port_no
+        src_ipv4 = flow_info.src_ipv4
+        dst_ipv4 = flow_info.dst_ipv4
         actions = []
         actions.append(parser.OFPActionOutput(dst_port))
         match = parser.OFPMatch(
@@ -145,16 +149,17 @@ class Shortest_Forwarding(app_manager.RyuApp):
             LOG.info("arp processing: can not find dst in local,flooding to peer and local.... ")
             #tell other controllers to flood
             flow_info = DFlow(self.cid,None, None, None, None, None, None, FLOOD, msg.data)
-            #self.topo_manager.add_flowinfo(flow_info)
+            self.topo_manager.add_flowinfo(flow_info)
             #flood in local domain
-            self.flood_local(msg.data,datapath.id,in_port)
+            self.flood_local(msg.data)
             return
         #   1.2 dst location found, packet-out
-        if dport.dpid == src_dpid:
-            out = self._build_packet_out(datapath, ofproto.OFP_NO_BUFFER,
+        switch_list = get_switch(self.topology_api_app, dport.dpid)
+        if len(switch_list) > 0:
+            out = self._build_packet_out(switch_list[0].dp, ofproto.OFP_NO_BUFFER,
                                          ofproto.OFPP_CONTROLLER,
                                          dport.port_no, msg.data)
-            datapath.send_msg(out)
+            switch_list[0].dp.send_msg(out)
         else:
             #TODO send to peer
             flow_info = DFlow(self.cid,dport.dpid,None,None,dport.port_no,None,None,PACKET_OUT,msg.data)
@@ -168,12 +173,14 @@ class Shortest_Forwarding(app_manager.RyuApp):
             dhost_dpid = int(port_info[0])
             dhost_port_no = int(port_info[1])
             switch = get_switch(self.topology_api_app, dhost_dpid)
+            LOG.debug("host-port_info:%s:%s",port_info[0],port_info[1])
             if len(switch) > 0:
                 datapath = switch[0].dp
                 ofproto = datapath.ofproto
                 parser = datapath.ofproto_parser
-                LOG.debug("flood,packet out,dpid:%d,dst_port:%d,",datapath.id,dhost_dpid)
+                LOG.debug("flood,packet out,dpid:%d,dst_port:%d,",datapath.id,dhost_port_no)
                 out = self._build_packet_out(datapath, ofproto.OFP_NO_BUFFER,ofproto.OFPP_CONTROLLER, dhost_port_no,data)
+                datapath.send_msg(out)
         self.logger.debug("Flooding msg")
 
     def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst):
@@ -191,6 +198,10 @@ class Shortest_Forwarding(app_manager.RyuApp):
         if datapath.id == dst_dport.dpid:
             dflow = DFlow(None, datapath.id, eth_type,in_port,dst_dport.port_no,ip_src, ip_dst,operation_type=FLOW_MOD,data=None)
             self.send_flow_mod_local(datapath, dflow)
+            self.send_packet_out_local(datapath, msg.buffer_id, in_port,
+                                       dst_dport.port_no,
+                                       msg.data)
+            return
         # 2.if not,find shortest path between src_sw and dst_sw
         #   2.1 get all links from topo_manager and create a graph from links
         graph = nx.DiGraph()
@@ -222,9 +233,8 @@ class Shortest_Forwarding(app_manager.RyuApp):
                              "dst_port_no": aft_link["src_port_no"]}
             elif i == len(path) - 1:
                 pre_link = dlink_list_new[(path[i - 1], path[i])]
-                aft_link = dlink_list_new[(path[i], path[i + 1])]
                 flow_info = {"dpid": path[i], "src_port_no": pre_link["dst_port_no"],
-                             "dst_port_no": aft_link["src_port_no"]}
+                             "dst_port_no": dst_dport.port_no}
             else:
                 pre_link = dlink_list_new[(path[i - 1], path[i])]
                 aft_link = dlink_list_new[(path[i], path[i + 1])]
@@ -234,7 +244,8 @@ class Shortest_Forwarding(app_manager.RyuApp):
         #   2.4 according detail path info add/mod flows
         for flow_info in path_info:
             dpid = flow_info["dpid"]
-            if dswitch_map[dpid] == self.cid:
+            LOG.debug(dswitch_map.keys())
+            if dswitch_map[dpid].cid == self.cid:
                 dp = get_switch(self.topology_api_app,dpid)[0].dp
                 dflow_mod = DFlow(self.cid, dpid, eth_type,flow_info["src_port_no"],flow_info["dst_port_no"],ip_src, ip_dst,operation_type=FLOW_MOD,data=msg.data)
                 self.send_flow_mod_local(dp, dflow_mod)
@@ -261,3 +272,16 @@ class Shortest_Forwarding(app_manager.RyuApp):
             datapath=datapath, buffer_id=buffer_id,
             data=msg_data, in_port=src_port, actions=actions)
         return out
+
+    def add_flow(self, dp, p, match, actions, idle_timeout=0, hard_timeout=0):
+        ofproto = dp.ofproto
+        parser = dp.ofproto_parser
+
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+
+        mod = parser.OFPFlowMod(datapath=dp, priority=p,
+                                idle_timeout=idle_timeout,
+                                hard_timeout=hard_timeout,
+                                match=match, instructions=inst)
+        dp.send_msg(mod)

@@ -48,13 +48,14 @@ class TopoManager2(app_manager.RyuApp):
     def start(self):
         super(TopoManager2, self).start()
         #self.show_topo_thread = hub.spawn(self._show_topo)
-        thread.start_new_thread(self._receive_flow, ())
+        thread.start_new_thread(self._topo_show, ())
 
-    def _receive_flow(self):
+    def _topo_show(self):
         dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
         dport_map = self.hazelcast_manager.get_map(DPORT_MAP)
         dhost_map = self.hazelcast_manager.get_map(DHOST_MAP)
         dlink_map = self.hazelcast_manager.get_map(DLINK_MAP)
+        dflow_map = self.hazelcast_manager.get_map(DFLOW_MAP)
         while True:
             print "---------------------show topo:---------------------"
             print "switches in topo:"
@@ -66,9 +67,12 @@ class TopoManager2(app_manager.RyuApp):
             print "hosts in topo:"
             for key in dhost_map:
                 print "key:%s  --- value: %s" % (key, dhost_map.get(key))
-            print "linkss in topo:"
+            print "links in topo:"
             for key in dlink_map:
                 print "key:%s  --- value: %s" % (key, dlink_map.get(key))
+            print "flows in topo:"
+            for key in dlink_map:
+                print "key:%s  --- value: %s" % (key, dlink_map.get(key).to_dict())
 
             hub.sleep(5)
 
@@ -146,7 +150,13 @@ class TopoManager2(app_manager.RyuApp):
     def host_add_handler(self, ev):
         host = ev.host
         port_id = str(host.port.dpid) + ":" + str(host.port.port_no)
-        dhost = DHost(port_id, host.mac, host.ipv4, host.ipv6)
+        ipv4 = None
+        ipv6 = None
+        if len(host.ipv4) > 0:
+            ipv4 = host.ipv4[0]
+        if len(host.ipv6) > 0:
+            ipv6 = host.ipv6[0]
+        dhost = DHost(port_id, host.mac, ipv4, ipv6)
         data = dtopobase2dict(dhost)
         print "host-add:+++++++++++++++++++++++++++++++++++++++++++++++++++++data:"
         self.hazelcast_manager.update_map_value(DHOST_MAP, port_id, data)
@@ -195,6 +205,7 @@ class TopoManager2(app_manager.RyuApp):
         dport_id = None
         for dhost_json in dhost_map.values():
             dhost = dict2dhost(dhost_json)
+            LOG.info("match host,find:%s--%s,matching:%s----%s",host_ip,type(host_ip),dhost.ipv4,type(dhost.ipv4))
             if dhost.ipv4 == host_ip:
                 dport_id = dhost.port_id
         if dport_id:
@@ -219,10 +230,10 @@ class TopoManager2(app_manager.RyuApp):
 
     def get_all_switch_map(self):
         dswitch_map = self.hazelcast_manager.get_map(DSWITCH_MAP)
-        dswitch_map = {}
+        d_map = {}
         for key in dswitch_map:
-            dswitch_map[key] = dict2dswitch(dswitch_map.get(key))
-        return dswitch_map
+            d_map[key] = dict2dswitch(dswitch_map.get(key))
+        return d_map
 
     def get_all_link(self):
         d_map = self.hazelcast_manager.get_map(DLINK_MAP)

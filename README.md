@@ -1,3 +1,3 @@
 # ryu-cluster
 ======
-Enhance ryu to have can be run as cluster. 
+Enhance ryu to have can it  be run as cluster.
